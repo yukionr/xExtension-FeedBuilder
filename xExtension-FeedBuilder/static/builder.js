@@ -16,16 +16,16 @@
   }
   const app=document.querySelector('#feed-builder');if(!app)return;
   const el=id=>document.getElementById('fb-'+id);
-  let field='item',slot='list',selected='',context=null,id=0,busy=false;
+  let field='item',slot='list',selected='',context=null,busy=false,saveFeedback=false;
   const snapshots={};let items=[];
-  const status=(text,error=false)=>{el('status').textContent=text;el('status').classList.toggle('fb-error',error);};
+  const status=(text,error=false)=>{for(const node of saveFeedback?[el('status'),el('save-status')]:[el('status')]){node.textContent=text;node.classList.toggle('fb-error',error);}if(saveFeedback)el('save-status').scrollIntoView({block:'nearest'});};
   const config=()=>{const c={xpath:{},render:el('render').checked,fullRender:el('full-render').checked,fullContent:''};for(const t of app.querySelectorAll('[data-xpath]')){if(t.dataset.xpath==='fullContent')c.fullContent=t.value.trim();else c.xpath[t.dataset.xpath]=t.value.trim();}return c;};
   async function api(op,data={}) {
    const body=new URLSearchParams({_csrf:app.dataset.csrf,payload:JSON.stringify({op,...data})});
    const response=await fetch(app.dataset.api,{method:'POST',body,credentials:'same-origin'});
    const dataOut=await response.json();if(!response.ok)throw Error(dataOut.error||'処理に失敗しました');return dataOut;
   }
-  async function run(work){if(busy)return;busy=true;app.setAttribute('aria-busy','true');for(const b of app.querySelectorAll('button'))b.disabled=true;try{await work();}catch(e){status(e.message,true);}finally{busy=false;app.removeAttribute('aria-busy');for(const b of app.querySelectorAll('button'))b.disabled=false;}}
+  async function run(work,saving=false){if(busy)return;busy=true;saveFeedback=saving;app.setAttribute('aria-busy','true');for(const b of app.querySelectorAll('button'))b.disabled=true;try{await work();}catch(e){status(e.message,true);}finally{busy=false;saveFeedback=false;app.removeAttribute('aria-busy');for(const b of app.querySelectorAll('button'))b.disabled=false;}}
   function choose(next){field=next;selected='';for(const b of app.querySelectorAll('[data-field]'))b.setAttribute('aria-pressed',String(b.dataset.field===field));el('selection').textContent=`${app.querySelector(`[data-field="${field}"]`).textContent}：ページ内をクリック` ;}
   function mark(ids){const doc=el('frame').contentDocument;if(!doc)return;for(const node of doc.querySelectorAll('[data-fb-node]'))node.style.outline=ids.includes(node.dataset.fbNode)?'3px solid #1675de':'';}
   function show(which){slot=which;const snap=snapshots[which];if(!snap)throw Error('先にページを取得してください');el('frame').srcdoc=snap.html;selected='';}
@@ -69,9 +69,9 @@
   el('open-article').addEventListener('click',()=>run(async()=>{if(!items.length)await preview();const item=items[Number(el('article').value)||0];await snapshot('full',item.link);choose('fullContent');}));
   for(const direction of ['parent','child'])el(direction).addEventListener('click',()=>run(async()=>{if(!selected)throw Error('先に要素をクリックしてください');await pick(selected,direction);}));
   el('check').addEventListener('click',()=>run(preview));
-  el('save').addEventListener('click',()=>run(async()=>{status('再取得して設定を検証・保存しています…');const result=await api('save',{id,url:el('url').value,title:el('title').value,category:Number(el('category').value),config:config()});id=result.id;el('url').readOnly=true;status(result.message);}));
+  el('save').addEventListener('click',()=>run(async()=>{status('再取得して設定を検証・保存しています…');const result=await api('save',{id:Number(el('existing').value)||0,url:el('url').value,title:el('title').value,category:Number(el('category').value),config:config()});const value=String(result.id),label=el('title').value.trim()||el('url').value;let option=Array.from(el('existing').options).find(o=>o.value===value);if(!option){option=new Option(label,value);el('existing').add(option);}else option.textContent=label;el('existing').value=value;el('url').readOnly=true;status(result.message);},true));
   el('existing').addEventListener('change',()=>run(async()=>{
-   id=Number(el('existing').value);context=null;items=[];delete snapshots.list;delete snapshots.full;
+   const id=Number(el('existing').value);context=null;items=[];delete snapshots.list;delete snapshots.full;
    if(!id){el('url').readOnly=false;el('editor').hidden=true;return;}
    const r=await api('load',{id});el('url').value=r.url;el('url').readOnly=true;el('title').value=r.title;el('category').value=r.category;el('render').checked=r.config.render;el('full-render').checked=r.config.fullRender;
    for(const t of app.querySelectorAll('[data-xpath]'))t.value=t.dataset.xpath==='fullContent'?r.config.fullContent:(r.config.xpath[t.dataset.xpath]||'');

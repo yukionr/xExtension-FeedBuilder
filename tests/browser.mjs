@@ -44,7 +44,16 @@ try {
  await page.locator('#fb-check').click();await page.locator('#fb-results article').nth(1).waitFor();assert.equal(await page.locator('#fb-results article').count(),2);assert.equal(await page.evaluate(()=>window.injected),undefined);console.log('ok selection, preview, inert script');
  await page.locator('#fb-open-article').click();await frame.locator('.body').waitFor();await frame.locator('.body').click();await page.waitForFunction(()=>document.querySelector('[data-xpath=fullContent]').value.length>0);
  await page.locator('#fb-title').fill(title);await page.locator('#fb-check').click();await page.locator('#fb-results').filter({hasText:'Full article 1'}).waitFor();
+ const savedResponse=page.waitForResponse(r=>r.url().includes('c=builder') && r.request().postData()?.includes('%22op%22%3A%22save%22'));
  const beforeSaveFetches=fullFetches;await page.locator('#fb-save').click();await page.locator('#fb-status').filter({hasText:'保存しました'}).waitFor({timeout:30000});assert.equal(fullFetches-beforeSaveFetches,1,'saving validates one article without fetching all full articles synchronously');console.log('ok full content and registration');
+ const saved=await (await savedResponse).json();
+ assert.equal(await page.locator('#fb-existing').inputValue(),String(saved.id),'saved subscription must be reflected in the selection instead of displaying new');
+ assert.match(await page.locator('#fb-save-status').innerText(),/保存しました/);
+ await page.route('**/*c=builder*a=api*',async route=>{const data=JSON.parse(new URLSearchParams(route.request().postData()).get('payload'));if(data.op==='save'){await route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'編集対象が不正です'})});}else await route.continue();});
+ await page.locator('#fb-save').click();await page.locator('#fb-save-status').filter({hasText:'編集対象が不正です'}).waitFor();
+ const feedback=await page.locator('#fb-save-status').boundingBox();assert.ok(feedback && feedback.y>=0 && feedback.y+feedback.height<=1000,'save errors must be visible next to the button');
+ await page.unroute('**/*c=builder*a=api*');
+ console.log('ok save state and visible error feedback');
  await page.reload();await page.locator('#fb-existing').selectOption({label:title});await page.waitForFunction(()=>document.querySelector('[data-xpath=fullContent]').value.length>0);assert.equal(await page.locator('#fb-title').inputValue(),title);console.log('ok re-edit');
  const feedId=await page.locator('#fb-existing').inputValue();
  async function refresh(expire=false){

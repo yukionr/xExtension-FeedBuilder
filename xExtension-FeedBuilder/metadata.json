@@ -1,0 +1,1 @@
+{"name":"Feed Builder","author":"Feed Builder contributors","description":"URL からフィードを検出し、ページ上の選択から XPath と全文取得を設定します。","version":"0.1.0","entrypoint":"FeedBuilder","type":"user"}

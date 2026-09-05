@@ -1,0 +1,24 @@
+<?php declare(strict_types=1); ?>
+<main class="post fb-app" id="feed-builder" data-api="<?= _url('builder','api') ?>" data-csrf="<?= FreshRSS_Auth::csrfToken() ?>">
+<h1>ページからフィードを作成</h1>
+<p>URL からフィードを探します。見つからなければページの中から記事や本文を選択できます。</p>
+<label>保存済み設定 <select id="fb-existing"><option value="">新規作成</option><?php foreach($this->feeds as $feed): ?><option value="<?= $feed->id() ?>"><?= htmlspecialchars($feed->name(),ENT_QUOTES,'UTF-8') ?></option><?php endforeach; ?></select></label>
+<div class="fb-row"><label>URL <input id="fb-url" type="url" placeholder="https://example.com/news" required /></label><button id="fb-discover" class="btn">フィードを探す</button><button id="fb-create" class="btn">ページから作成</button></div>
+<p id="fb-status" role="status" aria-live="polite"></p><div id="fb-candidates"></div>
+<section id="fb-editor" hidden>
+<div class="fb-row"><label>フィード名 <input id="fb-title" /></label><label>カテゴリー <select id="fb-category"><?php foreach($this->categories as $cat): if($cat->kind()===FreshRSS_Category::KIND_DYNAMIC_OPML)continue; ?><option value="<?= $cat->id() ?>"><?= htmlspecialchars($cat->name(),ENT_QUOTES,'UTF-8') ?></option><?php endforeach; ?></select></label></div>
+<div class="fb-row"><label><input id="fb-render" type="checkbox" />一覧を JavaScript で描画</label><button class="btn" id="fb-refresh">一覧を再取得</button></div>
+<p>「記事の枠」を選んでから、ページ内の記事をクリックしてください。同じ構造の記事をまとめて選びます。親・子ボタンで範囲を調整できます。</p>
+<div class="fb-layout"><div class="fb-controls">
+<?php foreach(['item'=>'記事の枠（必須）','itemTitle'=>'タイトル（必須）','itemUri'=>'リンク（必須）','itemContent'=>'概要','itemTimestamp'=>'日付','itemThumbnail'=>'画像','fullContent'=>'記事リンク先の本文'] as $key=>$label): ?>
+<div class="fb-field"><button type="button" class="btn" data-field="<?= $key ?>" aria-pressed="false"><?= $label ?>を選ぶ</button><label><?= $label ?> XPath<textarea data-xpath="<?= $key ?>" rows="2" spellcheck="false"></textarea></label></div>
+<?php endforeach; ?>
+<div class="fb-row"><button id="fb-parent" class="btn">親要素</button><button id="fb-child" class="btn">子要素</button></div>
+<div class="fb-row"><button id="fb-check" class="btn">抽出結果を確認</button><button id="fb-save" class="btn btn-important">登録・保存</button></div>
+</div><div class="fb-preview">
+<div class="fb-row"><button id="fb-list" class="btn">一覧ページ</button><select id="fb-article" aria-label="本文を選択する記事"></select><label><input id="fb-full-render" type="checkbox" />本文を JavaScript で描画</label><button id="fb-open-article" class="btn">記事ページを開く</button></div>
+<p id="fb-selection" aria-live="polite">選択する項目を指定してください</p>
+<iframe id="fb-frame" title="クリックして抽出範囲を選ぶページ" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>
+</div></div>
+<h2>抽出結果</h2><div id="fb-results"></div>
+</section></main>

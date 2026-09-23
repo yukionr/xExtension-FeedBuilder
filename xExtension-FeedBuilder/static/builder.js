@@ -26,7 +26,7 @@
    const dataOut=await response.json();if(!response.ok)throw Error(dataOut.error||'処理に失敗しました');return dataOut;
   }
   async function run(work,saving=false){if(busy)return;busy=true;saveFeedback=saving;app.setAttribute('aria-busy','true');for(const b of app.querySelectorAll('button'))b.disabled=true;try{await work();}catch(e){status(e.message,true);}finally{busy=false;saveFeedback=false;app.removeAttribute('aria-busy');for(const b of app.querySelectorAll('button'))b.disabled=false;}}
-  function choose(next){field=next;selected='';for(const b of app.querySelectorAll('[data-field]'))b.setAttribute('aria-pressed',String(b.dataset.field===field));el('selection').textContent=`${app.querySelector(`[data-field="${field}"]`).textContent}：ページ内をクリック` ;}
+  function choose(next){field=next;const target=field==='fullContent'?'full':'list';if(slot!==target && snapshots[target])show(target);selected='';for(const b of app.querySelectorAll('[data-field]'))b.setAttribute('aria-pressed',String(b.dataset.field===field));el('selection').textContent=`${app.querySelector(`[data-field="${field}"]`).textContent}：ページ内をクリック` ;}
   function mark(ids){const doc=el('frame').contentDocument;if(!doc)return;for(const node of doc.querySelectorAll('[data-fb-node]'))node.style.outline=ids.includes(node.dataset.fbNode)?'3px solid #1675de':'';}
   function show(which){slot=which;const snap=snapshots[which];if(!snap)throw Error('先にページを取得してください');el('frame').srcdoc=snap.html;selected='';}
   async function snapshot(which,url){status('ページを取得しています…');const result=await api('snapshot',{slot:which,url,render:el(which==='list'?'render':'full-render').checked});snapshots[which]=result;show(which);status('ページ内をクリックして範囲を選べます');}

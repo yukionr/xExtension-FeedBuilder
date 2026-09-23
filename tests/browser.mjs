@@ -43,7 +43,11 @@ try {
  await page.locator('[data-field=itemUri]').click();await frame.locator('a').first().click();await page.waitForFunction(()=>document.querySelector('[data-xpath=itemUri]').value.includes('@href'));
  await page.locator('#fb-check').click();await page.locator('#fb-results article').nth(1).waitFor();assert.equal(await page.locator('#fb-results article').count(),2);assert.equal(await page.evaluate(()=>window.injected),undefined);console.log('ok selection, preview, inert script');
  await page.locator('#fb-open-article').click();await frame.locator('.body').waitFor();await frame.locator('.body').click();await page.waitForFunction(()=>document.querySelector('[data-xpath=fullContent]').value.length>0);
+ await page.locator('[data-field=itemContent]').click();await frame.locator('article p').nth(1).click();
+ await page.waitForFunction(()=>document.querySelector('[data-xpath=itemContent]').value.length>0);
+ assert.doesNotMatch(await page.locator('#fb-status').innerText(),/一覧ページへ戻って/);
  await page.locator('#fb-title').fill(title);await page.locator('#fb-check').click();await page.locator('#fb-results').filter({hasText:'Full article 1'}).waitFor();
+ assert.match(await page.locator('#fb-results article').nth(1).innerText(),/Summary 2/);
  const savedResponse=page.waitForResponse(r=>r.url().includes('c=builder') && r.request().postData()?.includes('%22op%22%3A%22save%22'));
  const beforeSaveFetches=fullFetches;await page.locator('#fb-save').click();await page.locator('#fb-status').filter({hasText:'保存しました'}).waitFor({timeout:30000});assert.equal(fullFetches-beforeSaveFetches,1,'saving validates one article without fetching all full articles synchronously');console.log('ok full content and registration');
  const saved=await (await savedResponse).json();

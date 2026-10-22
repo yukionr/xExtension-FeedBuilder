@@ -9,7 +9,7 @@ final class Document {
     private array $nodes = [];
     public function __construct(string $html, public string $url) {
         $this->dom = new \DOMDocument();
-        if (!@$this->dom->loadHTML('<?xml encoding="utf-8" ?>' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) throw new \InvalidArgumentException('HTML を解析できません');
+        if (!@$this->dom->loadHTML('<?xml encoding="utf-8" ?>' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING)) throw new \InvalidArgumentException(_t('feed_builder.html_invalid'));
         $this->xp = new \DOMXPath($this->dom);
         $base = $this->xp->evaluate('string(//base/@href)');
         if (is_string($base) && $base !== '') $this->url = self::absolute($base, $url);
@@ -44,12 +44,12 @@ final class Document {
     public function nodeId(string $xpath): string { return $this->query($xpath)->item(0)?->attributes?->getNamedItem('data-fb-node')?->nodeValue ?? ''; }
     private function query(string $expr, ?\DOMNode $context = null): \DOMNodeList {
         $result = @$this->xp->query($expr, $context);
-        if ($result === false) throw new \InvalidArgumentException('XPath の構文を確認してください');
+        if ($result === false) throw new \InvalidArgumentException(_t('feed_builder.xpath_invalid'));
         return $result;
     }
     public function evaluate(string $expr, ?string $context = null): string {
         $r = @$this->xp->evaluate('normalize-space(' . $expr . ')', $context === null ? null : ($this->nodes[$context] ?? null));
-        if (!is_string($r)) throw new \InvalidArgumentException('XPath の構文を確認してください');
+        if (!is_string($r)) throw new \InvalidArgumentException(_t('feed_builder.xpath_invalid'));
         return $r;
     }
     public function ids(string $expr): array {
@@ -79,8 +79,8 @@ final class Document {
         return $tag;
     }
     public function selector(string $id, ?string $context = null, bool $group = false): string {
-        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException('要素を選択してください');
-        $root = $context !== null ? ($this->nodes[$context] ?? throw new \InvalidArgumentException('記事枠を選択してください')) : null;
+        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException(_t('feed_builder.select_element'));
+        $root = $context !== null ? ($this->nodes[$context] ?? throw new \InvalidArgumentException(_t('feed_builder.select_container'))) : null;
         $parts = [];
         for ($current = $node; $current instanceof \DOMElement && $current !== $root; $current = $current->parentNode) {
             $step = $this->step($current);
@@ -96,18 +96,18 @@ final class Document {
                 if ($global->length === 1 || $sameGroup) return '//' . implode('/', $parts);
             }
         }
-        if ($root !== null && $current !== $root) throw new \InvalidArgumentException('記事枠の内側を選択してください');
+        if ($root !== null && $current !== $root) throw new \InvalidArgumentException(_t('feed_builder.select_inside'));
         return ($root !== null ? '.' : '') . ($parts ? '/' . implode('/', $parts) : '');
     }
     public function groupNode(string $id): string {
-        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException('要素を選択してください');
+        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException(_t('feed_builder.select_element'));
         for ($current = $node; $current instanceof \DOMElement && !in_array($current->tagName, ['body','html']); $current = $current->parentNode) {
             if ($this->query('./' . $this->step($current), $current->parentNode)->length > 1 && $this->query('.//a[@href] | self::a[@href]', $current)->length > 0) return $current->getAttribute('data-fb-node');
         }
         return $id;
     }
     public function related(string $id, string $direction): string {
-        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException('要素を選択してください');
+        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException(_t('feed_builder.select_element'));
         $other = $direction === 'parent' ? $node->parentNode : $node->firstElementChild;
         return $other instanceof \DOMElement ? $other->getAttribute('data-fb-node') : $id;
     }
@@ -116,13 +116,13 @@ final class Document {
         for ($node = $this->nodes[$id] ?? null; $node instanceof \DOMElement; $node = $node->parentNode) {
             if (in_array($node->getAttribute('data-fb-node'), $ids, true)) return $node->getAttribute('data-fb-node');
         }
-        throw new \InvalidArgumentException('記事枠の内側を選択してください');
+        throw new \InvalidArgumentException(_t('feed_builder.select_inside'));
     }
     public function fieldSelector(string $id, ?string $context, string $field): string {
-        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException('要素を選択してください');
+        $node = $this->nodes[$id] ?? throw new \InvalidArgumentException(_t('feed_builder.select_element'));
         if ($field === 'itemUri') {
             while ($node->tagName !== 'a' && $node->parentNode instanceof \DOMElement && $node->getAttribute('data-fb-node') !== $context) $node = $node->parentNode;
-            if (!$node->hasAttribute('href')) throw new \InvalidArgumentException('記事のリンクを選択してください');
+            if (!$node->hasAttribute('href')) throw new \InvalidArgumentException(_t('feed_builder.select_link'));
             return $this->selector($node->getAttribute('data-fb-node'), $context) . '/@href';
         }
         $suffix = match ($field) { 'itemThumbnail' => $node->hasAttribute('src') ? '/@src' : '/@data-src', 'itemTimestamp' => $node->hasAttribute('datetime') ? '/@datetime' : '', default => '' };
@@ -130,7 +130,7 @@ final class Document {
     }
     public function content(string $expr, ?\DOMNode $context = null): string {
         $result = @$this->xp->evaluate($expr, $context);
-        if ($result === false) throw new \InvalidArgumentException('XPath の構文を確認してください');
+        if ($result === false) throw new \InvalidArgumentException(_t('feed_builder.xpath_invalid'));
         if (!$result instanceof \DOMNodeList) return htmlspecialchars((string)$result, ENT_QUOTES, 'UTF-8');
         $out = '';
         foreach ($result as $node) $out .= $this->dom->saveHTML($node);
@@ -139,18 +139,18 @@ final class Document {
     }
     public function items(array $settings): array {
         $nodes = $this->query($settings['item'] ?? '');
-        if (!$nodes->length) throw new \InvalidArgumentException('記事が0件です。範囲または描画方法を確認してください');
-        if ($nodes->length > 100) throw new \InvalidArgumentException('記事が100件を超えています。範囲を絞ってください');
+        if (!$nodes->length) throw new \InvalidArgumentException(_t('feed_builder.no_articles'));
+        if ($nodes->length > 100) throw new \InvalidArgumentException(_t('feed_builder.too_many_articles'));
         $items = [];
         foreach ($nodes as $node) {
             $text = function(string $key) use ($settings, $node): string {
                 if (empty($settings[$key])) return '';
                 $v = @$this->xp->evaluate('normalize-space(' . $settings[$key] . ')', $node);
-                if (!is_string($v)) throw new \InvalidArgumentException('XPath の構文を確認してください');
+                if (!is_string($v)) throw new \InvalidArgumentException(_t('feed_builder.xpath_invalid'));
                 return $v;
             };
             $title = $text('itemTitle'); $link = self::absolute($text('itemUri'), $this->url);
-            if ($title === '' || $link === '') throw new \InvalidArgumentException('全記事のタイトルと HTTP(S) リンクを指定してください');
+            if ($title === '' || $link === '') throw new \InvalidArgumentException(_t('feed_builder.missing_fields'));
             $items[$link] = ['title'=>$title,'link'=>$link,'guid'=>'urn:sha256:' . hash('sha256', $link),'content'=>empty($settings['itemContent']) ? '' : $this->content($settings['itemContent'], $node),'timestamp'=>$text('itemTimestamp'),'thumbnail'=>self::absolute($text('itemThumbnail'), $this->url)];
         }
         return array_values($items);
@@ -168,7 +168,7 @@ final class Document {
             if ($node->tagName === 'img') {
                 $image = $node->getAttribute('data-fb-image');
                 if (preg_match('~^data:image/(png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/=]+$~D',$image)) $node->setAttribute('src',$image);
-                else { $node->setAttribute('alt',$node->getAttribute('alt') ?: '画像'); $node->setAttribute('style',$node->getAttribute('style') . ';min-width:80px;min-height:50px;background-color:#ddd'); }
+                else { $node->setAttribute('alt',$node->getAttribute('alt') ?: _t('feed_builder.itemThumbnail')); $node->setAttribute('style',$node->getAttribute('style') . ';min-width:80px;min-height:50px;background-color:#ddd'); }
             }
             $node->removeAttribute('data-fb-image');
         }

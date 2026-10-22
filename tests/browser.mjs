@@ -12,6 +12,7 @@ let failFull=false,fullRevision="",fullFetches=0;
 const fixture=http.createServer(async(req,res)=>{
  let body='';for await(const c of req)body+=c;
  try{const data=JSON.parse(body);let html;
+ if(data.url==='https://example.test/service-error'){res.writeHead(422);res.end(JSON.stringify({error:'Private and reserved addresses are not allowed',errorCode:'private_address',errorArgs:[]}));return;}
  if(data.url==='https://example.test/feed.xml')html='<?xml version="1.0"?><rss version="2.0"><channel><title>Native feed</title><link>https://example.test/</link><description>Example</description><item><title>News</title><link>https://example.test/news/1</link><guid>1</guid></item></channel></rss>';
  else if(data.url==='https://example.test/discover')html='<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body>Source</body></html>';
  else if(data.url.includes('/news/')){fullFetches++;if(failFull)throw Error('fixture article unavailable');html='<html><body><nav>Exclude navigation</nav><main><div class="body"><p>Full article '+data.url.slice(-1)+fullRevision+'</p><img src="/image.png"></div></main></body></html>';}
@@ -77,6 +78,35 @@ try {
  const nativeId=(await native.json()).id;
  const loaded=await page.request.post('http://127.0.0.1:18473/i/?c=builder&a=api',{form:{_csrf:csrf,payload:JSON.stringify({op:'load',id:nativeId})}});assert.equal((await loaded.json()).config.render,false);console.log('ok native HTML+XPath save and reload');
  await fs.mkdir('.test-output',{recursive:true});await page.screenshot({path:'.test-output/builder.png',fullPage:true});
+ for(const language of ['en','fr','ja']) {
+  const change=spawn(php,[...(process.env.PHP_INI?['-c',process.env.PHP_INI]:[]),'tests/language.php',language],{env:process.env,stdio:'inherit'});
+  assert.equal((await once(change,'exit'))[0],0);
+  const japanese=language==='ja';
+  await page.goto('http://127.0.0.1:18473/i/?c=subscription&a=add');
+  assert.equal(await page.locator('a.fb-link').innerText(),japanese?'フィードを探す・ページから作成':'Find feeds or build from a page');
+  await page.locator('a.fb-link').click();
+  assert.equal(await page.locator('#feed-builder h1').innerText(),japanese?'ページからフィードを作成':'Build a feed from a page');
+  assert.equal(await page.locator('#fb-create').innerText(),japanese?'ページから作成':'Build from page');
+  assert.equal(await page.locator('#fb-frame').getAttribute('title'),japanese?'クリックして抽出範囲を選ぶページ':'Page for selecting extraction elements');
+  await page.locator('#fb-url').fill('https://example.test/static?lang='+language);
+  await page.locator('#fb-create').click();
+  await page.locator('#fb-status').filter({hasText:japanese?'ページ内をクリック':'Click the page'}).waitFor();
+  await page.frameLocator('#fb-frame').locator('h2').first().click();
+  await page.locator('#fb-selection').filter({hasText:japanese?'一致 2 件':'2 matches'}).waitFor();
+  const token=await page.locator('#feed-builder').getAttribute('data-csrf');
+  const bad=await page.request.post('http://127.0.0.1:18473/i/?c=builder&a=api',{form:{_csrf:token,payload:JSON.stringify({op:'select',key:'invalid',field:'item'})}});
+  assert.equal(bad.status(),422);
+  assert.equal((await bad.json()).error,japanese?'プレビューの期限が切れました。再取得してください':'The preview has expired. Fetch the page again.');
+  const created=await page.request.post('http://127.0.0.1:18473/i/?c=builder&a=api',{form:{_csrf:token,payload:JSON.stringify({op:'save',url:'https://example.test/static?language='+language+'&run='+Date.now(),title:'Language fixture '+language,category:1,config:{xpath:{item:'//article',itemTitle:'.//h2',itemUri:'.//a/@href'},render:false,fullRender:false,fullContent:''}})}});
+  assert.equal(created.status(),200);
+  assert.equal((await created.json()).message,japanese?'設定を保存しました。記事は FreshRSS の更新処理で取得します。':'Settings saved. Articles will be fetched during FreshRSS refresh.');
+  await page.locator('#fb-url').fill('https://example.test/service-error');
+  await page.locator('#fb-create').click();
+  await page.locator('#fb-status').filter({hasText:japanese?'内部・予約アドレスには接続できません':'Private and reserved addresses are not allowed'}).waitFor();
+  if(!japanese)for(const text of await page.locator('#feed-builder button, #feed-builder h1, #fb-status, #fb-selection').allTextContents())assert.doesNotMatch(text,/[ぁ-んァ-ヶ一-龠]/);
+  await page.screenshot({path:'.test-output/builder-'+language+'.png',fullPage:true});
+  console.log('ok language '+language+(japanese?'':' (English)'));
+ }
  assert.deepEqual(errors,[]);console.log('ok browser errors: 0');
 } catch(e){console.error(logs.split('\n').filter(line=>/Warning|Fatal|Deprecated|Error/.test(line)).slice(-10).join('\n'));throw e;}
 finally{await browser?.close();server.kill();await once(server,'exit');fixture.closeAllConnections();await new Promise(r=>fixture.close(r));}

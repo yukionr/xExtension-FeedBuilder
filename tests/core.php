@@ -2,6 +2,12 @@
 declare(strict_types=1);
 require __DIR__ . '/../xExtension-FeedBuilder/lib/Document.php';
 use FeedBuilder\Document;
+// Standalone library tests use the English catalogue in place of the host translator.
+function _t(string $key, ...$args): string {
+    $value = require __DIR__ . '/../xExtension-FeedBuilder/i18n/en/feed_builder.php';
+    foreach (array_slice(explode('.', $key), 1) as $part) $value = $value[$part];
+    return $args ? vsprintf($value, $args) : $value;
+}
 function check(bool $ok, string $name): void { if (!$ok) throw new RuntimeException($name); echo "ok $name\n"; }
 $html='<html><head><link rel="alternate" type="application/rss+xml" href="../feed.xml"></head><body><nav><a href="/">home</a></nav><main><article class="news"><h2><a href="/news/1">First</a></h2><time datetime="2026-09-01">9/1</time><p>Summary</p></article><article class="news"><h2><a href="/news/2">Second</a></h2><p>Other</p></article></main><script>alert(1)</script></body></html>';
 $d=new Document($html,'https://example.test/news/');
@@ -36,3 +42,15 @@ check(count($new->items(['item'=>$generated,'itemTitle'=>'.//a','itemUri'=>'.//a
 $semantic=new Document('<html><body><div class="bodyL Story_contents__abcde"><p>Body</p></div></body></html>','https://example.test/');
 check(str_contains($semantic->selector($semantic->nodeId('//div')),'Story_contents__'),'prefer semantic class over typography');
 check($d->contextFor($d->nodeId('(//article//a)[2]'),'//article')===$d->nodeId('(//article)[2]'),'select fields in any matched article');
+
+$english = require __DIR__ . '/../xExtension-FeedBuilder/i18n/en/feed_builder.php';
+$japanese = require __DIR__ . '/../xExtension-FeedBuilder/i18n/ja/feed_builder.php';
+$checkCatalogue = function(array $en, array $ja) use (&$checkCatalogue): void {
+    if (array_keys($en) !== array_keys($ja)) throw new RuntimeException('Translation keys differ');
+    foreach ($en as $key => $value) {
+        if (is_array($value)) { $checkCatalogue($value, $ja[$key]); continue; }
+        if (!is_string($ja[$key]) || $ja[$key] === '' || substr_count($value, '%s') !== substr_count($ja[$key], '%s')) throw new RuntimeException('Translation placeholders differ: ' . $key);
+    }
+};
+$checkCatalogue($english, $japanese);
+echo "ok bilingual catalogue keys and placeholders\n";

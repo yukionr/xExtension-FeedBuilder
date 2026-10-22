@@ -49,13 +49,13 @@ test('fetch follows relative redirects',async t=>{
 });
 test('fetch enforces size and status limits',async t=>{
  mockResponses(t,[{body:'too large'},{status:404}]);
- await assert.rejects(fetchPublic('http://8.8.8.8/',{limit:3}),/応答サイズ/);
+ await assert.rejects(fetchPublic('http://8.8.8.8/',{limit:3}),/Response exceeds/);
  await assert.rejects(fetchPublic('http://8.8.8.8/'),/HTTP 404/);
 });
 test('fetch validates redirect targets and count',async t=>{
  mockResponses(t,[{status:302,headers:{location:'http://127.0.0.1/'}},{status:302,headers:{location:'/next'}}]);
- await assert.rejects(fetchPublic('http://8.8.8.8/'),/内部・予約/);
- await assert.rejects(fetchPublic('http://8.8.8.8/',{redirects:0}),/リダイレクトが多すぎ/);
+ await assert.rejects(fetchPublic('http://8.8.8.8/'),/Private and reserved/);
+ await assert.rejects(fetchPublic('http://8.8.8.8/',{redirects:0}),/Too many redirects/);
 });
 test('fetch rejects malformed redirect without an uncaught exception',async t=>{
  mockResponses(t,[{status:302,headers:{location:'http://['}}]);

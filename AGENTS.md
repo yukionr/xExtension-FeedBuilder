@@ -6,3 +6,4 @@
 - Route external URL retrieval through the validation and DNS-pinning path in `renderer/network.mjs`. Do not add a fallback that disables Chromium's sandbox or proxy.
 - Use PHP DOMXPath for XPath evaluation during registration, refresh, and preview. Keep preview-only attributes out of stored article content.
 - Do not default to forking FreshRSS, changing its database schema, or exposing services publicly. Publishing container images and deploying to production require separate approval.
+- Provide only Japanese (`ja`) and English (`en`) translations. Use FreshRSS's standard English fallback for every other language. When changing localized behavior, verify Japanese, English, and a third FreshRSS language in the disposable browser tests.

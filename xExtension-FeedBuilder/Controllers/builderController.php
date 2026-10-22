@@ -21,7 +21,7 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
     private function document(array $input): Document {
         $slot = ($input['slot'] ?? '') === 'full' ? 'full' : 'list';
         $page = Minz_Session::paramArray('feedBuilder_' . $slot);
-        if (!isset($page['key']) || !hash_equals($page['key'], $input['key'] ?? '') || $page['time']<time()-1800) throw new InvalidArgumentException('プレビューの期限が切れました。再取得してください');
+        if (!isset($page['key']) || !hash_equals($page['key'], $input['key'] ?? '') || $page['time']<time()-1800) throw new InvalidArgumentException(_t('feed_builder.preview_expired'));
         return new Document($page['html'],$page['url']);
     }
     private function discover(string $url): array {
@@ -50,9 +50,9 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
         header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: no-store');
         try {
             $raw=Minz_Request::paramString('payload',true);
-            if(strlen($raw)>32768)throw new InvalidArgumentException('要求が大きすぎます');
+            if(strlen($raw)>32768)throw new InvalidArgumentException(_t('feed_builder.request_large'));
             $input=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
-            if(!is_array($input))throw new InvalidArgumentException('要求が不正です');
+            if(!is_array($input))throw new InvalidArgumentException(_t('feed_builder.request_invalid'));
             $result=match($input['op'] ?? '') {
                 'discover'=>$this->discover($input['url']),
                 'snapshot'=>$this->snapshot($input),
@@ -60,7 +60,7 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
                 'preview'=>$this->preview($input),
                 'save'=>$this->save($input),
                 'load'=>$this->loadConfig((int)($input['id']??0)),
-                default=>throw new InvalidArgumentException('未対応の操作です'),
+                default=>throw new InvalidArgumentException(_t('feed_builder.operation_invalid')),
             };
             echo json_encode($result,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE);
         } catch(Throwable $e){http_response_code(422);echo json_encode(['error'=>$e->getMessage()],JSON_INVALID_UTF8_SUBSTITUTE);}
@@ -68,7 +68,7 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
     }
     private function select(array $input): array {
         $doc=$this->document($input);$id=(string)($input['node']??'');$field=$input['field']??'item';
-        if(!in_array($field,['item','itemTitle','itemUri','itemContent','itemTimestamp','itemThumbnail','fullContent']))throw new InvalidArgumentException('項目が不正です');
+        if(!in_array($field,['item','itemTitle','itemUri','itemContent','itemTimestamp','itemThumbnail','fullContent']))throw new InvalidArgumentException(_t('feed_builder.field_invalid'));
         if(isset($input['direction']))$id=$doc->related($id,$input['direction']);
         elseif($field==='item')$id=$doc->groupNode($id);
         $context=$input['context']??null;
@@ -89,9 +89,9 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
     }
     private function loadConfig(int $id): array {
         $feed=FreshRSS_Factory::createFeedDao()->searchById($id);
-        if($feed===null)throw new InvalidArgumentException('フィードが見つかりません');
+        if($feed===null)throw new InvalidArgumentException(_t('feed_builder.feed_missing'));
         $config=$feed->attributeArray('feedBuilder');
-        if($config===null && $feed->attributeBoolean('feedBuilderEditor')!==true)throw new InvalidArgumentException('このフィードは作成画面で編集できません');
+        if($config===null && $feed->attributeBoolean('feedBuilderEditor')!==true)throw new InvalidArgumentException(_t('feed_builder.feed_not_editable'));
         return ['id'=>$id,'url'=>$feed->url(),'title'=>$feed->name(),'category'=>$feed->categoryId(),'config'=>$config??['xpath'=>$feed->attributeArray('xpath')??[],'render'=>false,'fullRender'=>false,'fullContent'=>'']];
     }
     private function save(array $input): array {
@@ -102,7 +102,7 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
         $title=trim($input['title']??'') ?: $url;
         $category=(int)($input['category']??1);
         $cat=FreshRSS_Factory::createCategoryDao()->searchById($category);
-        if($cat===null || $cat->kind()===FreshRSS_Category::KIND_DYNAMIC_OPML)throw new InvalidArgumentException('カテゴリーを選択してください');
+        if($cat===null || $cat->kind()===FreshRSS_Category::KIND_DYNAMIC_OPML)throw new InvalidArgumentException(_t('feed_builder.select_category'));
         $managed=$config['render'] || $config['fullContent']!=='';
         $kind=$managed?FreshRSS_Feed::KIND_RSS:FreshRSS_Feed::KIND_HTML_XPATH;
         $xpath=$config['xpath'];$xpath['itemUid']=$xpath['itemUri'];
@@ -110,21 +110,21 @@ final class FreshExtension_builder_Controller extends FreshRSS_ActionController 
         $id=(int)($input['id']??0);$dao=FreshRSS_Factory::createFeedDao();
         if($id>0) {
             $feed=$dao->searchById($id);
-            if($feed===null || ($feed->attributeArray('feedBuilder')===null && $feed->attributeBoolean('feedBuilderEditor')!==true))throw new InvalidArgumentException('編集対象が不正です');
-            if($feed->url()!==$url)throw new InvalidArgumentException('編集時は URL を変更できません。新規登録してください');
+            if($feed===null || ($feed->attributeArray('feedBuilder')===null && $feed->attributeBoolean('feedBuilderEditor')!==true))throw new InvalidArgumentException(_t('feed_builder.edit_invalid'));
+            if($feed->url()!==$url)throw new InvalidArgumentException(_t('feed_builder.url_immutable'));
             foreach($attributes as $key=>$value)$feed->_attribute($key,$value);
-            if(!$dao->updateFeed($id,['name'=>$title,'category'=>$category,'kind'=>$kind,'attributes'=>$feed->attributes()]))throw new RuntimeException('保存できませんでした');
+            if(!$dao->updateFeed($id,['name'=>$title,'category'=>$category,'kind'=>$kind,'attributes'=>$feed->attributes()]))throw new RuntimeException(_t('feed_builder.save_failed'));
         } else {
-            if(count($dao->listFeeds())>=FreshRSS_Context::systemConf()->limits['max_feeds'])throw new InvalidArgumentException('フィード登録数の上限に達しています');
-            if($dao->searchByUrl($url)!==null)throw new InvalidArgumentException('この URL は登録済みです。保存済み設定から編集してください');
+            if(count($dao->listFeeds())>=FreshRSS_Context::systemConf()->limits['max_feeds'])throw new InvalidArgumentException(_t('feed_builder.feed_limit'));
+            if($dao->searchByUrl($url)!==null)throw new InvalidArgumentException(_t('feed_builder.duplicate'));
             $feed=new FreshRSS_Feed($url);
             $feed->_name($title);$feed->_category($cat);$feed->_kind($kind);$feed->_attributes($attributes);$feed->_website($url);
             $feed=Minz_ExtensionManager::callHook(Minz_HookType::FeedBeforeInsert,$feed);
-            if(!$feed instanceof FreshRSS_Feed)throw new RuntimeException('フィードの登録が取り消されました');
+            if(!$feed instanceof FreshRSS_Feed)throw new RuntimeException(_t('feed_builder.cancelled'));
             $id=$dao->addFeedObject($feed);
-            if(!$id)throw new RuntimeException('登録できませんでした');
+            if(!$id)throw new RuntimeException(_t('feed_builder.subscribe_failed'));
             FreshRSS_UserDAO::touch();
         }
-        return ['id'=>$id,'message'=>'設定を保存しました。記事は FreshRSS の更新処理で取得します。'];
+        return ['id'=>$id,'message'=>_t('feed_builder.saved_message')];
     }
 }

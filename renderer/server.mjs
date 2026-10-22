@@ -1,3 +1,4 @@
+import {ServiceError,errorResponse} from './errors.mjs';
 import http from 'node:http';
 import {createRenderer,fetchDocument} from './render.mjs';
 const port=Number(process.env.PORT || 3000);
@@ -13,12 +14,12 @@ const server=http.createServer(async(req,res)=>{
  }
  if(req.method==='GET' && req.url==='/health') {res.end('{"ok":true}');return;}
  if(req.method!=='POST' || !['/fetch','/render'].includes(req.url)) {res.writeHead(404);res.end('{}');return;}
- if(active>=2) {res.writeHead(503);res.end(JSON.stringify({error:'取得が混み合っています。再試行してください'}));return;}
+ if(active>=2) {res.writeHead(503);res.end(JSON.stringify(errorResponse(new ServiceError('service_busy'))));return;}
  active++;
  try {
-  let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw Error('要求が大きすぎます');}
+  let body='';for await(const chunk of req){body+=chunk;if(body.length>16384)throw new ServiceError('request_large');}
   const input=JSON.parse(body);
-  if(typeof input.url!=='string' || input.url.length>4096 || (input.waitXPath!==undefined && (typeof input.waitXPath!=='string' || input.waitXPath.length>4096)))throw Error('URL または待機条件が不正です');
+  if(typeof input.url!=='string' || input.url.length>4096 || (input.waitXPath!==undefined && (typeof input.waitXPath!=='string' || input.waitXPath.length>4096)))throw new ServiceError('url_invalid');
   let result;
   if(req.url==='/fetch') result=await fetchDocument(input.url);
   else {
@@ -26,7 +27,7 @@ const server=http.createServer(async(req,res)=>{
    result=await renderer.render(input.url,{waitXPath:input.waitXPath||'',preview:input.preview===true});
   }
   res.end(JSON.stringify(result));
- } catch(e){res.writeHead(422);res.end(JSON.stringify({error:e.message}));}
+ } catch(e){res.writeHead(422);res.end(JSON.stringify(errorResponse(e)));}
  finally{active--;}
 });
 server.requestTimeout=35000;

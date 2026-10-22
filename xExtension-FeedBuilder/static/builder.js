@@ -1,13 +1,15 @@
 (() => {
  'use strict';
  function init(){
-  if(document.documentElement.dataset.fbInitialized)return;
+  if(document.documentElement.dataset.fbInitialized || !window.context?.extensions?.feedBuilder)return;
+  const messages=window.context.extensions.feedBuilder;
+  const t=(key,...args)=>{let i=0;return messages[key].replace(/%s/g,()=>String(args[i++]));};
   document.documentElement.dataset.fbInitialized='1';
   // Keep the normal subscription form, and make its URL available to the wizard.
   const add=document.querySelector('#url_rss')?.form;
   if(add){
    const destination=()=>'?c=builder&a=index&auto=1&category='+encodeURIComponent(document.querySelector('#category')?.value||'1')+'&url='+encodeURIComponent(document.querySelector('#url_rss').value);
-   const link=document.createElement('a');link.className='btn fb-link';link.textContent='フィードを探す・ページから作成';link.href='?c=builder&a=index';link.addEventListener('click',()=>{link.href=destination();});add.append(link);
+   const link=document.createElement('a');link.className='btn fb-link';link.textContent=t('entry');link.href='?c=builder&a=index';link.addEventListener('click',()=>{link.href=destination();});add.append(link);
    add.addEventListener('submit',event=>{
     const custom=['http_user','http_pass','curl_params_cookie','curl_params','http_headers','curl_fields','curl_params_useragent','curl_params_redirects'];
     if(document.querySelector('#feed_kind')?.value!=='0' || custom.some(name=>add.elements[name]?.value.trim()) || add.elements.curl_params_cookiefile?.checked || (add.elements.curl_method?.value && add.elements.curl_method.value!=='GET'))return;
@@ -23,21 +25,21 @@
   async function api(op,data={}) {
    const body=new URLSearchParams({_csrf:app.dataset.csrf,payload:JSON.stringify({op,...data})});
    const response=await fetch(app.dataset.api,{method:'POST',body,credentials:'same-origin'});
-   const dataOut=await response.json();if(!response.ok)throw Error(dataOut.error||'処理に失敗しました');return dataOut;
+   const dataOut=await response.json();if(!response.ok)throw Error(dataOut.error||t('failed'));return dataOut;
   }
   async function run(work,saving=false){if(busy)return;busy=true;saveFeedback=saving;app.setAttribute('aria-busy','true');for(const b of app.querySelectorAll('button'))b.disabled=true;try{await work();}catch(e){status(e.message,true);}finally{busy=false;saveFeedback=false;app.removeAttribute('aria-busy');for(const b of app.querySelectorAll('button'))b.disabled=false;}}
-  function choose(next){field=next;const target=field==='fullContent'?'full':'list';if(slot!==target && snapshots[target])show(target);selected='';for(const b of app.querySelectorAll('[data-field]'))b.setAttribute('aria-pressed',String(b.dataset.field===field));el('selection').textContent=`${app.querySelector(`[data-field="${field}"]`).textContent}：ページ内をクリック` ;}
+  function choose(next){field=next;const target=field==='fullContent'?'full':'list';if(slot!==target && snapshots[target])show(target);selected='';for(const b of app.querySelectorAll('[data-field]'))b.setAttribute('aria-pressed',String(b.dataset.field===field));el('selection').textContent=t('choose',app.querySelector(`[data-field="${field}"]`).textContent) ;}
   function mark(ids){const doc=el('frame').contentDocument;if(!doc)return;for(const node of doc.querySelectorAll('[data-fb-node]'))node.style.outline=ids.includes(node.dataset.fbNode)?'3px solid #1675de':'';}
-  function show(which){slot=which;const snap=snapshots[which];if(!snap)throw Error('先にページを取得してください');el('frame').srcdoc=snap.html;selected='';}
-  async function snapshot(which,url){status('ページを取得しています…');const result=await api('snapshot',{slot:which,url,render:el(which==='list'?'render':'full-render').checked});snapshots[which]=result;show(which);status('ページ内をクリックして範囲を選べます');}
+  function show(which){slot=which;const snap=snapshots[which];if(!snap)throw Error(t('fetch_first'));el('frame').srcdoc=snap.html;selected='';}
+  async function snapshot(which,url){status(t('fetching'));const result=await api('snapshot',{slot:which,url,render:el(which==='list'?'render':'full-render').checked});snapshots[which]=result;show(which);status(t('click_page'));}
   async function pick(node,direction){
-   if(field==='fullContent' && slot!=='full')throw Error('記事ページを開いて本文を選択してください');
-   if(field!=='fullContent' && slot!=='list')throw Error('一覧ページへ戻って項目を選択してください');
-   if(field!=='item' && field!=='fullContent' && !context)throw Error('先に記事の枠を選択してください');
+   if(field==='fullContent' && slot!=='full')throw Error(t('open_full'));
+   if(field!=='fullContent' && slot!=='list')throw Error(t('return_list'));
+   if(field!=='item' && field!=='fullContent' && !context)throw Error(t('container_first'));
    const r=await api('select',{slot,key:snapshots[slot].key,node,field,context,direction,itemXPath:config().xpath.item});
    app.querySelector(`[data-xpath="${field}"]`).value=r.xpath;selected=r.node;
    if(field==='item')context=r.node;else if(r.context)context=r.context;
-   mark(r.ids);el('selection').textContent=`選択しました（一致 ${r.ids.length} 件）。別の要素をクリックして変更できます`;
+   mark(r.ids);el('selection').textContent=t('selected',r.ids.length);
   }
   el('frame').addEventListener('load',()=>{
    const doc=el('frame').contentDocument;if(!doc)return;
@@ -46,7 +48,7 @@
   });
   for(const b of app.querySelectorAll('[data-field]'))b.addEventListener('click',()=>choose(b.dataset.field));
   async function preview(){
-   if(!snapshots.list)throw Error('一覧を取得してください');status('抽出結果を確認しています…');
+   if(!snapshots.list)throw Error(t('fetch_list'));status(t('checking'));
    const r=await api('preview',{slot:'list',key:snapshots.list.key,config:config()});items=r.items;
    el('results').replaceChildren();el('article').replaceChildren();
    for(const [i,item] of items.entries()){
@@ -55,21 +57,21 @@
     a.textContent=item.title;a.href=item.link;a.target='_blank';a.rel='noreferrer noopener';time.textContent=item.timestamp;content.innerHTML=item.content;article.append(a,time,content);el('results').append(article);
    }
    if(slot==='list')mark(r.ids);
-   status(`${items.length} 件を抽出しました${r.warnings.length?'。本文: '+r.warnings.join(' / '):''}`,r.warnings.length>0);
+   status(t('extracted',items.length)+(r.warnings.length?t('warnings',r.warnings.join(' / ')):''),r.warnings.length>0);
   }
   el('discover').addEventListener('click',()=>run(async()=>{
-   status('フィードを探しています…');el('candidates').replaceChildren();const r=await api('discover',{url:el('url').value});
-   for(const feed of r.candidates){const a=document.createElement('a');a.className='btn fb-link';a.textContent=`${feed.title} を登録`;a.href='?c=feed&a=add&category='+encodeURIComponent(el('category').value)+'&url_rss='+encodeURIComponent(feed.url);el('candidates').append(a);}
+   status(t('discovering'));el('candidates').replaceChildren();const r=await api('discover',{url:el('url').value});
+   for(const feed of r.candidates){const a=document.createElement('a');a.className='btn fb-link';a.textContent=t('subscribe',feed.title);a.href='?c=feed&a=add&category='+encodeURIComponent(el('category').value)+'&url_rss='+encodeURIComponent(feed.url);el('candidates').append(a);}
    if(!r.candidates.length){el('editor').hidden=false;el('render').checked=r.render;await snapshot('list',el('url').value);choose('item');}
-   status(r.candidates.length?`${r.candidates.length} 件のフィードが見つかりました`:'フィードが見つかりませんでした。「ページから作成」で範囲を選べます。'+(r.errors?'一部候補は取得に失敗しました。':''));
+   status(r.candidates.length?t('found',r.candidates.length):t('none_found')+(r.errors?t('candidate_failed'):''));
   }));
   el('create').addEventListener('click',()=>run(async()=>{el('editor').hidden=false;await snapshot('list',el('url').value);choose('item');}));
   el('refresh').addEventListener('click',()=>run(async()=>{context=null;await snapshot('list',el('url').value);}));
   el('list').addEventListener('click',()=>run(async()=>{show('list');choose('item');}));
   el('open-article').addEventListener('click',()=>run(async()=>{if(!items.length)await preview();const item=items[Number(el('article').value)||0];await snapshot('full',item.link);choose('fullContent');}));
-  for(const direction of ['parent','child'])el(direction).addEventListener('click',()=>run(async()=>{if(!selected)throw Error('先に要素をクリックしてください');await pick(selected,direction);}));
+  for(const direction of ['parent','child'])el(direction).addEventListener('click',()=>run(async()=>{if(!selected)throw Error(t('click_first'));await pick(selected,direction);}));
   el('check').addEventListener('click',()=>run(preview));
-  el('save').addEventListener('click',()=>run(async()=>{status('再取得して設定を検証・保存しています…');const result=await api('save',{id:Number(el('existing').value)||0,url:el('url').value,title:el('title').value,category:Number(el('category').value),config:config()});const value=String(result.id),label=el('title').value.trim()||el('url').value;let option=Array.from(el('existing').options).find(o=>o.value===value);if(!option){option=new Option(label,value);el('existing').add(option);}else option.textContent=label;el('existing').value=value;el('url').readOnly=true;status(result.message);},true));
+  el('save').addEventListener('click',()=>run(async()=>{status(t('saving'));const result=await api('save',{id:Number(el('existing').value)||0,url:el('url').value,title:el('title').value,category:Number(el('category').value),config:config()});const value=String(result.id),label=el('title').value.trim()||el('url').value;let option=Array.from(el('existing').options).find(o=>o.value===value);if(!option){option=new Option(label,value);el('existing').add(option);}else option.textContent=label;el('existing').value=value;el('url').readOnly=true;status(result.message);},true));
   el('existing').addEventListener('change',()=>run(async()=>{
    const id=Number(el('existing').value);context=null;items=[];delete snapshots.list;delete snapshots.full;
    if(!id){el('url').readOnly=false;el('editor').hidden=true;return;}
@@ -79,5 +81,6 @@
   }));
   const query=new URLSearchParams(location.search);el('url').value=query.get('url')||'';if(query.has('category'))el('category').value=query.get('category');choose('item');if(query.get('auto')==='1' && el('url').value)el('discover').click();
  }
+ document.addEventListener('freshrss:globalContextLoaded',()=>{if(document.readyState!=='loading')init();});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

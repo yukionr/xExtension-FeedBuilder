@@ -5,16 +5,16 @@ final class Builder {
     public function __construct(private Client $client = new Client()) {}
     public static function validate(array $config): array {
         $settings = $config['xpath'] ?? [];
-        if (!is_array($settings)) throw new \InvalidArgumentException('XPath 設定が不正です');
+        if (!is_array($settings)) throw new \InvalidArgumentException(_t('feed_builder.config_invalid'));
         $out = [];
         foreach (['item','itemTitle','itemUri','itemContent','itemTimestamp','itemThumbnail'] as $key) {
             $value = $settings[$key] ?? '';
-            if (!is_string($value) || strlen($value)>4096) throw new \InvalidArgumentException('XPath が長すぎます');
+            if (!is_string($value) || strlen($value)>4096) throw new \InvalidArgumentException(_t('feed_builder.xpath_long'));
             $out[$key] = trim($value);
         }
-        foreach (['item','itemTitle','itemUri'] as $key) if ($out[$key] === '') throw new \InvalidArgumentException('記事枠・タイトル・リンクを指定してください');
+        foreach (['item','itemTitle','itemUri'] as $key) if ($out[$key] === '') throw new \InvalidArgumentException(_t('feed_builder.required_fields'));
         $full = $config['fullContent'] ?? '';
-        if (!is_string($full) || strlen($full)>4096) throw new \InvalidArgumentException('本文 XPath が不正です');
+        if (!is_string($full) || strlen($full)>4096) throw new \InvalidArgumentException(_t('feed_builder.full_xpath_invalid'));
         return ['version'=>1,'xpath'=>$out,'render'=>($config['render'] ?? false) === true,'fullRender'=>($config['fullRender'] ?? false) === true,'fullContent'=>trim($full)];
     }
     public function extract(string $url, array $config): array {
@@ -24,7 +24,7 @@ final class Builder {
     public function full(array $item, array $config): string {
         $page = $this->client->page($item['link'], $config['fullRender'], $config['fullRender'] ? $config['fullContent'] : '');
         $content = (new Document($page['html'], $page['url']))->content($config['fullContent']);
-        if (trim(strip_tags($content)) === '' && !str_contains($content, '<img')) throw new \RuntimeException('記事本文が0件です');
+        if (trim(strip_tags($content)) === '' && !str_contains($content, '<img')) throw new \RuntimeException(_t('feed_builder.no_content'));
         return \FreshRSS_SimplePieCustom::sanitizeHTML($content, $page['url']);
     }
     public static function rss(string $title, string $url, array $items): string {

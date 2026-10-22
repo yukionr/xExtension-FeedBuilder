@@ -1,3 +1,4 @@
+import {ServiceError} from './errors.mjs';
 import {chromium} from 'playwright';
 import {resolveTarget,fetchPublic,startProxy} from './network.mjs';
 export async function createRenderer() {
@@ -8,7 +9,7 @@ export async function createRenderer() {
  return {
   async render(url,{waitXPath='',preview=false}={}) {
    await resolveTarget(url);
-   if(active>=2) throw Error('描画が混み合っています。再試行してください');
+   if(active>=2) throw new ServiceError('render_busy');
    active++;
    let context;
    const deadline=Date.now()+30000;
@@ -24,7 +25,7 @@ export async function createRenderer() {
      const page=await context.newPage();
      page.on('popup',popup=>popup.close());
      const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:25000});
-     if(!response || !response.ok()) throw Error(`取得先 HTTP ${response?.status() || 0}`);
+     if(!response || !response.ok()) throw new ServiceError('upstream_status',response?.status() || 0);
      if(waitXPath) await page.locator(`xpath=${waitXPath}`).first().waitFor({state:'attached',timeout:Math.max(1,deadline-Date.now()-1000)});
      else {
       // Bounded settling of the initial view; persistent network connections are common.
@@ -33,7 +34,7 @@ export async function createRenderer() {
      }
      await resolveTarget(page.url());
      const html=await snapshotPage(page,{preview,deadline});
-     if(Buffer.byteLength(html)>5*1024*1024) throw Error('描画 HTML の上限を超えました');
+     if(Buffer.byteLength(html)>5*1024*1024) throw new ServiceError('render_large');
      return {url:page.url(),html,status:response.status()};
     } finally {clearTimeout(timer);}
    } finally {if(context)await context.close().catch(()=>{});active--;}
@@ -45,7 +46,7 @@ export async function fetchDocument(url) {
  const result=await fetchPublic(url);
  // HTML from this service is decoded once, before PHP DOM parsing.
  const charset=/charset\s*=\s*["']?([^\s;"']+)/i.exec(result.type)?.[1] || 'utf-8';
- let html;try{html=new TextDecoder(charset).decode(result.body);}catch{throw Error('未対応の文字コードです');}
+ let html;try{html=new TextDecoder(charset).decode(result.body);}catch{throw new ServiceError('charset_unsupported');}
  return {url:result.url,html,status:result.status,type:result.type};
 }
 

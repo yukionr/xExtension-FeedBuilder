@@ -31,30 +31,31 @@ there is no fallback that disables it.
 
 ## Creating and editing a feed
 
-The extension's controls currently use Japanese labels, quoted below to help
-identify them.
+The extension follows the FreshRSS language setting: Japanese (`ja`) uses
+Japanese, and every other setting uses English. Only these two translations
+are provided. The labels below use English.
 
 1. Enter a web page URL in FreshRSS's usual Add feed form. A submission with the
    default RSS settings opens feed discovery. Submissions with authentication or
    HTTP options, and other feed types, keep FreshRSS's standard behavior.
 2. Choose a detected feed to complete the standard subscription, or select
-   **ページから作成** (create from page).
-3. If the list needs JavaScript, enable **一覧を JavaScript で描画** and fetch it
-   again. Click **記事の枠を選ぶ**, then an article to select similarly structured
-   article containers. Adjust the range with the parent/child buttons or by
+   **Build from page**.
+3. If the list needs JavaScript, enable **Render list with JavaScript** and fetch it
+   again. Click **Select Article container (required)**, then an article to select
+   similarly structured article containers. Adjust the range with the parent/child buttons or by
    clicking another element.
 4. Select a title and link. Summary, date, and image are optional. You can edit
-   the generated XPath manually and use **抽出結果を確認** to inspect matches and
+   the generated XPath manually and use **Check extraction** to inspect matches and
    extracted articles. Selecting a list field after opening an article switches
    back to the list preview.
 5. For full text, open an article from the extraction results and use
-   **記事リンク先の本文を選ぶ** to select its content. JavaScript rendering for
+   **Select Full article content** to select its content. JavaScript rendering for
    article pages is independent of list rendering.
 6. Set the feed name and category, then save. Saving fetches and validates the
    list and one representative article again; the next regular refresh imports
    all articles. Success and error messages also appear near the save button.
-   The saved feed becomes the selected entry in **保存済み設定**, keeping the
-   displayed selection and subsequent save target aligned. Use that selector
+   The saved feed becomes the selected entry in **Saved configurations**, keeping
+   the displayed selection and subsequent save target aligned. Use that selector
    to edit a saved configuration; its URL cannot be changed.
 
 The isolated preview does not execute the source page's scripts. Rendered
@@ -100,7 +101,10 @@ continue to use FreshRSS's own refresh path.
 
 `POST /fetch` retrieves HTML from `url`. `POST /render` also accepts optional
 `waitXPath` and `preview` fields. Successful responses contain the final `url`,
-`html`, and `status`; failures return a non-200 response with an `error` field.
+`html`, and `status`; failures return a non-200 response with an English `error`
+field. Known service errors also include `errorCode` and `errorArgs`, which the
+extension uses to display a localized message. Update the extension and renderer
+together to retain localized error messages.
 `GET /health` checks the process, and `GET /ready` checks Chromium startup.
 
 Retrieval permits public HTTP(S) targets on standard ports only. DNS results are
@@ -136,7 +140,9 @@ npm run test:browser
 configuration. The integration test starts a server on localhost:18473 and a
 temporary fetch service. Synthetic pages exercise registration, re-editing,
 duplicate prevention, content retention and recovery, CSRF protection, and
-viewport widths. The test stops its own processes on exit.
+viewport widths. It also switches the disposable user between Japanese, English,
+and French to check Japanese display and English fallback, including save and
+error messages. The test stops its own processes on exit.
 
 Set `TEST_BROWSER=firefox` and install Playwright's Firefox to use that browser.
 This does not verify a user's Firefox Nightly or native Wayland GUI session.

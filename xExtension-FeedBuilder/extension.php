@@ -6,12 +6,19 @@ require_once __DIR__ . '/lib/Builder.php';
 final class FeedBuilderExtension extends Minz_Extension {
     public function init(): void {
         parent::init();
+        $this->registerTranslates();
+        $this->registerHook(Minz_HookType::JsVars, [$this,'translations']);
         $this->registerController('builder'); $this->registerViews();
         $this->registerHook(Minz_HookType::FreshrssInit, [$this,'assets']);
         $this->registerHook(Minz_HookType::MenuOtherEntry, [$this,'menu']);
         $this->registerHook(Minz_HookType::SimplepieBeforeInit, [$this,'load']);
     }
-    public function menu(): string { return '<li class="item"><a href="' . _url('builder','index') . '">ページからフィードを作成</a></li>'; }
+    public function menu(): string { return '<li class="item"><a href="' . _url('builder','index') . '">' . htmlspecialchars(_t('feed_builder.title'),ENT_QUOTES,'UTF-8') . '</a></li>'; }
+    public function translations(array $vars): array {
+        $catalogue = require __DIR__ . '/i18n/en/feed_builder.php';
+        foreach ($catalogue['js'] as $key => $_) $vars['feedBuilder'][$key] = _t('feed_builder.js.' . $key);
+        return $vars;
+    }
     public function assets(): void {
         Minz_View::appendScript($this->getFileUrl('builder.js'));
         Minz_View::appendStyle($this->getFileUrl('builder.css'));
@@ -33,7 +40,7 @@ final class FeedBuilderExtension extends Minz_Extension {
                 $previous=$cache[$item['link']] ?? null;
                 if (is_array($previous) && ($previous['time'] ?? 0)>time()-86400) { $item['content']=$previous['content']; continue; }
                 try {
-                    if(microtime(true)>$deadline) throw new RuntimeException('本文取得は次回に継続します');
+                    if(microtime(true)>$deadline) throw new RuntimeException(_t('feed_builder.retry_later'));
                     $item['content']=$builder->full($item,$config);
                     $cache[$item['link']]=['time'=>time(),'content'=>$item['content']];
                 } catch (Throwable $e) {
@@ -45,7 +52,7 @@ final class FeedBuilderExtension extends Minz_Extension {
             if ($config['fullContent'] !== '') {
                 $cache=array_intersect_key($cache,array_fill_keys(array_column($items,'link'),true));
                 file_put_contents($cacheFile,json_encode($cache,JSON_THROW_ON_ERROR),LOCK_EX);
-                if ($warnings) Minz_Log::warning('Feed Builder: 本文取得 ' . $warnings . ' 件を次回再試行します (feed ' . $feed->id() . ')');
+                if ($warnings) Minz_Log::warning('Feed Builder: ' . _t('feed_builder.retry_warning',$warnings,$feed->id()));
             }
             $simplePie->set_raw_data(\FeedBuilder\Builder::rss($feed->name(),$feed->url(),$items));
             // SimplePie otherwise fetches feed_url even when raw_data is set.

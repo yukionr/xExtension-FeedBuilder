@@ -1,6 +1,6 @@
 # FreshRSS Feed Builder
 
-FreshRSS 1.29.1 のフィード登録を補助する拡張です。公開 URL から RSS / Atom を探し、
+FreshRSS 1.29.1 / 1.30.4 のフィード登録を補助する拡張です。公開 URL から RSS / Atom を探し、
 見つからないページでは記事の枠、タイトル、リンク、日付、画像、本文をクリックして
 XPath を生成します。JavaScript の描画には内部の Playwright / Chromium サービスを使います。
 
@@ -49,7 +49,7 @@ CSS Modules の末尾ハッシュを固定しない XPath を生成しますが�
 
 ## 起動・配置
 
-Node.js 22 以降と FreshRSS 1.29.1 が必要です。拡張ディレクトリを FreshRSS の
+Node.js 22 以降と FreshRSS 1.29.1 または 1.30.4 が必要です。拡張ディレクトリを FreshRSS の
 `extensions/` 配下へ配置し、設定の拡張機能から **Feed Builder** を有効にします。
 
 ```fish
@@ -101,6 +101,25 @@ npm run test:browser
 更新時の重複防止・本文保持・復旧、CSRF、表示幅を確認します。終了時に自分のプロセスを停止します。
 `TEST_BROWSER=firefox` と Playwright の Firefox を使う検証も可能です。これは利用者の
 Firefox Nightly / Wayland の実 GUI 確認とは別です。
+
+ホストに PHP がない場合は、rootless Podman とインストール済みの Node.js / Playwright
+を使って一式を実行できます。公式 FreshRSS 1.29.1 の digest 固定イメージから新しい
+一時環境を作り、Node.js・PHP・描画・ブラウザー結合テストを実行して終了時に削除します。
+本番の data やユーザープロファイルは使いません。コンテナー内の PHP からホスト上の
+合成取得サービスに接続するため host network を使い、リポジトリは読み取り専用で渡します。
+localhost:18473 を使うため同時実行はできません。
+
+```fish
+npm run test:container
+```
+
+別の FreshRSS 版を検証する場合は `FRESHRSS_TEST_IMAGE` にイメージ名と digest を指定します。
+この経路はコンテナー内の PHP 設定を使うため、ホストの `PHP_INI` は引き継ぎません。
+1.30.4 での実行例は次のとおりです。両版で登録・再編集・更新の結合テストを確認しています。
+
+```fish
+env FRESHRSS_TEST_IMAGE=docker.io/freshrss/freshrss:1.30.4@sha256:af44385229541bee24aa9148d0ff8f3b40e095373c63a2c0f74e09a27d3c59df npm run test:container
+```
 
 `node tests/gundam.mjs` は明示実行する実ページ確認です。ガンダム公式ニュースへ読み取りアクセスし、
 クリック操作で XPath を作り、一時 FreshRSS に登録・再更新します。localhost:18473/18474 を使用します。

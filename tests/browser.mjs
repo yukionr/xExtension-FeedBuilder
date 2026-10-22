@@ -31,7 +31,9 @@ try {
 
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:18473/i/?c=subscription&a=add');
- await page.locator('#url_rss').fill('https://example.test/discover');await page.locator('#add_rss button[type=submit]').click();
+ const addForm=page.locator('form').filter({has:page.locator('#url_rss')});
+ assert.equal(await addForm.locator('a.fb-link').count(),1,'Feed Builder must attach to the subscription form');
+ await page.locator('#url_rss').fill('https://example.test/discover');await addForm.locator('button[type=submit]').click();
  await page.locator('#fb-candidates a').waitFor();assert.match(await page.locator('#fb-candidates').innerText(),/Native feed/);console.log('ok native discovery');
  await page.locator('#fb-url').fill('https://example.test/news?run='+Date.now());
  await page.locator('#fb-create').click();await page.locator('#fb-status').filter({hasText:'ページ内をクリック'}).waitFor();

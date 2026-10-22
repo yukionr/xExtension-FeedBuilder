@@ -4,7 +4,7 @@
   if(document.documentElement.dataset.fbInitialized)return;
   document.documentElement.dataset.fbInitialized='1';
   // Keep the normal subscription form, and make its URL available to the wizard.
-  const add=document.querySelector('#add_rss');
+  const add=document.querySelector('#url_rss')?.form;
   if(add){
    const destination=()=>'?c=builder&a=index&auto=1&category='+encodeURIComponent(document.querySelector('#category')?.value||'1')+'&url='+encodeURIComponent(document.querySelector('#url_rss').value);
    const link=document.createElement('a');link.className='btn fb-link';link.textContent='フィードを探す・ページから作成';link.href='?c=builder&a=index';link.addEventListener('click',()=>{link.href=destination();});add.append(link);

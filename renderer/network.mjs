@@ -21,6 +21,19 @@ export async function resolveTarget(input,lookup=(host)=>dns.lookup(host,{all:tr
 export function pinnedLookup(target) {
  return (_host,options,callback)=>callback(null,options?.all?[{address:target.address,family:target.family}]:target.address,target.family);
 }
+async function readResponse(res, target, {limit,timeout,redirects,deadline}) {
+ if ([301,302,303,307,308].includes(res.statusCode) && res.headers.location) {
+  res.resume();
+  if(redirects<=0) throw Error('リダイレクトが多すぎます');
+  return fetchPublic(new URL(res.headers.location,target.url).href,{limit,timeout,redirects:redirects-1,deadline});
+ }
+ return new Promise((resolve,reject)=>{
+  let size=0; const chunks=[];
+  res.on('data',chunk=>{size+=chunk.length;if(size>limit){res.destroy(Error('応答サイズの上限を超えました'));}else chunks.push(chunk);});
+  res.on('error',reject);
+  res.on('end',()=>{ if(res.statusCode<200 || res.statusCode>=300) reject(Error(`取得先 HTTP ${res.statusCode}`)); else resolve({url:target.url.href,status:res.statusCode,type:res.headers['content-type']||'',body:Buffer.concat(chunks)});});
+ });
+}
 export async function fetchPublic(input, {limit=5*1024*1024,timeout=30000,redirects=5,deadline=Date.now()+timeout}={}) {
  const target=await resolveTarget(input);
  timeout=Math.min(timeout,deadline-Date.now());
@@ -28,14 +41,7 @@ export async function fetchPublic(input, {limit=5*1024*1024,timeout=30000,redire
  return new Promise((resolve,reject)=>{
   const transport=target.url.protocol==='https:'?https:http;
   const req=transport.request(target.url,{method:'GET',headers:{'user-agent':'FreshRSS-FeedBuilder/0.1','accept':'*/*'},lookup:pinnedLookup(target)},res=>{
-   if ([301,302,303,307,308].includes(res.statusCode) && res.headers.location) {
-    res.resume(); if(redirects<=0) return reject(Error('リダイレクトが多すぎます'));
-    resolve(fetchPublic(new URL(res.headers.location,target.url).href,{limit,timeout,redirects:redirects-1,deadline})); return;
-   }
-   let size=0; const chunks=[];
-   res.on('data',chunk=>{size+=chunk.length;if(size>limit){res.destroy(Error('応答サイズの上限を超えました'));}else chunks.push(chunk);});
-   res.on('error',reject);
-   res.on('end',()=>{ if(res.statusCode<200 || res.statusCode>=300) reject(Error(`取得先 HTTP ${res.statusCode}`)); else resolve({url:target.url.href,status:res.statusCode,type:res.headers['content-type']||'',body:Buffer.concat(chunks)});});
+   readResponse(res,target,{limit,timeout,redirects,deadline}).then(resolve,reject);
   });
   const timer=setTimeout(()=>req.destroy(Error('取得タイムアウト')),timeout);
   req.on('close',()=>clearTimeout(timer)); req.on('error',reject); req.end();

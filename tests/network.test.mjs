@@ -1,9 +1,15 @@
-import {test} from 'node:test';
+import {test,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {isPublicAddress, resolveTarget, fetchPublic} from '../renderer/network.mjs';
+import {HostPacing,hostPacing} from '../renderer/pacing.mjs';
+// Existing transport tests do not need real pacing delays or shared cooldowns.
+beforeEach(t=>{
+ t.mock.method(hostPacing,'acquire',async()=>{});
+ t.mock.method(hostPacing,'observe',()=>{});
+});
 for (const ip of ['127.0.0.1','10.0.0.1','192.168.1.1','172.16.0.2','169.254.169.254','100.100.100.100','0.0.0.0','224.1.1.1','198.18.0.1','::1','::ffff:8.8.8.8','fc00::1','fe80::1','2001:db8::1']) test(`reject ${ip}`,()=>assert.equal(isPublicAddress(ip),false));
 for (const ip of ['8.8.8.8','1.1.1.1','2606:4700:4700::1111']) test(`public ${ip}`,()=>assert.equal(isPublicAddress(ip),true));
 test('reject credentials, protocol, ports and mixed DNS',async()=>{
@@ -60,4 +66,24 @@ test('fetch validates redirect targets and count',async t=>{
 test('fetch rejects malformed redirect without an uncaught exception',async t=>{
  mockResponses(t,[{status:302,headers:{location:'http://['}}]);
  await assert.rejects(fetchPublic('http://8.8.8.8/'),/Invalid URL/);
+});
+for(const status of [429,503]) test(`HTTP ${status} prevents subsequent upstream requests until Retry-After expires`,async t=>{
+ let time=100000;
+ const pacing=new HostPacing({now:()=>time,sleep:async ms=>{time+=ms;}});
+ t.mock.method(hostPacing,'acquire',pacing.acquire.bind(pacing));
+ t.mock.method(hostPacing,'observe',pacing.observe.bind(pacing));
+ const urls=mockResponses(t,[{status,headers:{'retry-after':'120'}},{}]);
+ await assert.rejects(fetchPublic('http://8.8.8.8/'),new RegExp(`HTTP ${status}`));
+ await assert.rejects(fetchPublic('http://8.8.8.8/next'),new RegExp(`HTTP ${status}`));
+ assert.equal(urls.length,1);
+ time+=120000;
+ await fetchPublic('http://8.8.8.8/next');
+ assert.equal(urls.length,2);
+});
+test('redirects also acquire a host request slot',async t=>{
+ const acquired=[];
+ t.mock.method(hostPacing,'acquire',async url=>acquired.push(url));
+ mockResponses(t,[{status:302,headers:{location:'/next'}},{}]);
+ await fetchPublic('http://8.8.8.8/');
+ assert.deepEqual(acquired,['http://8.8.8.8/','http://8.8.8.8/next']);
 });

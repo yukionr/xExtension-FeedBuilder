@@ -8,7 +8,7 @@
     "start": "node renderer/server.mjs",
     "test:browser": "node tests/browser.mjs",
     "test:container": "bash scripts/test-container.sh",
-    "test:render": "node tests/snapshot.mjs",
+    "test:render": "node tests/snapshot.mjs && node tests/pacing-browser.mjs",
     "test:live": "node tests/gundam.mjs"
   },
   "dependencies": {

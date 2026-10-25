@@ -21,7 +21,9 @@ const fixture=http.createServer(async(req,res)=>{
  }catch(e){res.writeHead(422);res.end(JSON.stringify({error:e.message}));}
 });
 fixture.listen(0,'127.0.0.1');await once(fixture,'listening');
-const server=spawn(php,[...(process.env.PHP_INI?['-c',process.env.PHP_INI]:[]),'-S','127.0.0.1:18473','-t',`${root}/p`],{env:{...process.env,FEED_BUILDER_SERVICE:`http://127.0.0.1:${fixture.address().port}`},stdio:['ignore','ignore','pipe']});
+// The language fixture edits configuration from another process. Do not serve
+// stale configuration from the built-in server's opcode cache.
+const server=spawn(php,[...(process.env.PHP_INI?['-c',process.env.PHP_INI]:[]),'-d','opcache.enable=0','-S','127.0.0.1:18473','-t',`${root}/p`],{env:{...process.env,FEED_BUILDER_SERVICE:`http://127.0.0.1:${fixture.address().port}`},stdio:['ignore','ignore','pipe']});
 let logs='';server.stderr.on('data',b=>{logs+=b.toString();});
 const title='Fixture '+Date.now();
 let browser;
@@ -61,7 +63,7 @@ try {
  const feedback=await page.locator('#fb-save-status').boundingBox();assert.ok(feedback && feedback.y>=0 && feedback.y+feedback.height<=1000,'save errors must be visible next to the button');
  await page.unroute('**/*c=builder*a=api*');
  console.log('ok save state and visible error feedback');
- await page.reload();await page.locator('#fb-existing').selectOption({label:title});await page.waitForFunction(()=>document.querySelector('[data-xpath=fullContent]').value.length>0);assert.equal(await page.locator('#fb-title').inputValue(),title);console.log('ok re-edit');
+ await page.reload();await page.waitForFunction(()=>document.documentElement.dataset.fbInitialized==='1');await page.locator('#fb-existing').selectOption({label:title});await page.waitForFunction(()=>document.querySelector('[data-xpath=fullContent]').value.length>0);assert.equal(await page.locator('#fb-title').inputValue(),title);console.log('ok re-edit');
  const feedId=await page.locator('#fb-existing').inputValue();
  async function refresh(expire=false){
   const child=spawn(php,[...(process.env.PHP_INI?['-c',process.env.PHP_INI]:[]),'tests/refresh.php',feedId,expire?'expire':'refresh'],{env:{...process.env,FEED_BUILDER_SERVICE:`http://127.0.0.1:${fixture.address().port}`},stdio:['ignore','pipe','pipe']});

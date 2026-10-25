@@ -1,4 +1,5 @@
 import {ServiceError} from './errors.mjs';
+import {hostPacing} from './pacing.mjs';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import http from 'node:http';
@@ -23,6 +24,7 @@ export function pinnedLookup(target) {
  return (_host,options,callback)=>callback(null,options?.all?[{address:target.address,family:target.family}]:target.address,target.family);
 }
 async function readResponse(res, target, {limit,timeout,redirects,deadline}) {
+ hostPacing.observe(target.url.href,res.statusCode,res.headers['retry-after']);
  if ([301,302,303,307,308].includes(res.statusCode) && res.headers.location) {
   res.resume();
   if(redirects<=0) throw new ServiceError('redirect_limit');
@@ -37,6 +39,7 @@ async function readResponse(res, target, {limit,timeout,redirects,deadline}) {
 }
 export async function fetchPublic(input, {limit=5*1024*1024,timeout=30000,redirects=5,deadline=Date.now()+timeout}={}) {
  const target=await resolveTarget(input);
+ await hostPacing.acquire(target.url.href,deadline);
  timeout=Math.min(timeout,deadline-Date.now());
  if(timeout<=0)throw new ServiceError('fetch_timeout');
  return new Promise((resolve,reject)=>{

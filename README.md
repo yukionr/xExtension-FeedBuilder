@@ -83,6 +83,15 @@ FreshRSS's normal refresh pipeline without changing the database schema.
   work waits for the next refresh. Lists are limited to 100 articles. The service
   accepts two concurrent fetch/render requests, and rendering has a 30-second
   deadline per page. Empty matches and retrieval failures are errors.
+- The service spaces plain fetches (including preview images) and browser
+  navigations to the same hostname at least two seconds apart. Other browser
+  resources are not paced. HTTP 429 or 503 pauses new requests to that hostname
+  for at least 60 seconds, or longer when `Retry-After` specifies a later time.
+  Requests during the pause fail without contacting the host; full-text failures
+  retain previous content or the summary for a later refresh.
+- Pacing and pauses are shared within one service process and reset on restart.
+  They do not cover native `HTML+XPath` feeds, which use FreshRSS's own retrieval
+  path, or coordinate separate service instances.
 - Dates must be parseable by PHP's `strtotime`. Unparseable dates are omitted
   from RSS and left to FreshRSS's standard behavior.
 
@@ -143,6 +152,8 @@ duplicate prevention, content retention and recovery, CSRF protection, and
 viewport widths. It also switches the disposable user between Japanese, English,
 and French to check Japanese display and English fallback, including save and
 error messages. The test stops its own processes on exit.
+The test's PHP server disables opcode caching so language changes made by the
+fixture take effect immediately.
 
 Set `TEST_BROWSER=firefox` and install Playwright's Firefox to use that browser.
 This does not verify a user's Firefox Nightly or native Wayland GUI session.
